@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Fog Security — Attacker Demo</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  background: #0d1117;
+  color: #e6edf3;
+  min-height: 100vh;
+}
+header {
+  background: #161b22;
+  border-bottom: 1px solid #30363d;
+  padding: 14px 28px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+header h1 { font-size: 1.1rem; font-weight: 600; color: #f85149; }
+header .subtitle { font-size: 0.78rem; color: #8b949e; }
+.badge-red {
+  background: #f8514933;
+  color: #f85149;
+  border: 1px solid #f8514966;
+  border-radius: 12px;
+  padding: 2px 10px;
+  font-size: 0.72rem;
+}
+.nav-link {
+  margin-left: auto;
+  background: #21262d;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 6px 14px;
+  color: #e6edf3;
+  text-decoration: none;
+  font-size: 0.8rem;
+}
+.nav-link:hover { background: #30363d; }
+
+/* ── Network with attacker ─────────────────────────────────────────────── */
+.topology {
+  padding: 28px 28px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  position: relative;
+  height: 160px;
+  overflow: visible;
+}
+.node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  z-index: 2;
+}
+.node-box {
+  width: 100px;
+  height: 68px;
+  border-radius: 10px;
+  border: 2px solid #30363d;
+  background: #161b22;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  transition: border-color 0.25s, box-shadow 0.25s;
+}
+.node-box.glow-sensor { border-color: #58a6ff; box-shadow: 0 0 16px #58a6ff44; }
+.node-box.glow-fog    { border-color: #3fb950; box-shadow: 0 0 16px #3fb95044; }
+.node-box.glow-atk    { border-color: #f85149; box-shadow: 0 0 18px #f8514966; }
+.node-icon { font-size: 1.45rem; }
+.node-label { font-size: 0.67rem; color: #8b949e; text-align: center; }
+
+.connector {
+  flex: 1;
+  max-width: 60px;
+  height: 2px;
+  background: linear-gradient(90deg, #30363d, #30363d);
+  position: relative;
+}
+.connector.danger { background: linear-gradient(90deg, #f8514966, #f85149, #f8514966); }
+.connector-label {
+  position: absolute; top: -18px; left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.58rem; color: #8b949e; white-space: nowrap;
+}
+
+/* Attacker node sticks below the wire */
+.atk-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  z-index: 3;
+}
+.atk-wire {
+  width: 2px;
+  height: 30px;
+  background: linear-gradient(180deg, #f8514966, #f85149);
+}
+.atk-box {
+  width: 110px;
+  height: 68px;
+  border-radius: 10px;
+  border: 2px solid #f85149;
+  background: #1a0a09;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  box-shadow: 0 0 14px #f8514933;
+  transition: box-shadow 0.25s;
+}
+.atk-box.active { box-shadow: 0 0 28px #f85149aa; }
+.atk-icon { font-size: 1.5rem; }
+.atk-label { font-size: 0.67rem; color: #f85149; font-weight: 600; }
+
+/* ── Packet dot ───────────────────────────────────────────────────────── */
+#packet-dot {
+  position: absolute;
+  width: 13px; height: 13px;
+  border-radius: 50%;
+  background: #58a6ff;
+  box-shadow: 0 0 10px #58a6ff;
+  top: 50%; transform: translateY(-50%);
+  transition: left 0.35s cubic-bezier(0.4,0,0.2,1), background 0.2s, box-shadow 0.2s;
+  display: none; z-index: 10; pointer-events: none;
+}
+#packet-dot.visible   { display: block; }
+#packet-dot.encrypted { background: #d2a8ff; box-shadow: 0 0 10px #d2a8ff; }
+#packet-dot.rejected  { background: #f85149; box-shadow: 0 0 10px #f85149; }
+#packet-dot.ok        { background: #3fb950; box-shadow: 0 0 10px #3fb950; }
+
+/* ── Attacker panel ───────────────────────────────────────────────────── */
+.atk-panel {
+  margin: 14px 28px;
+  background: #1a0a09;
+  border: 1px solid #f8514955;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.atk-panel-header {
+  background: #2a1010;
+  border-bottom: 1px solid #f8514944;
+  padding: 10px 16px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #f85149;
+  display: flex; align-items: center; gap: 8px;
+}
+.atk-panel-body {
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 60px;
+}
+.atk-row {
+  display: grid;
+  grid-template-columns: 150px 1fr auto;
+  gap: 10px;
+  align-items: start;
+  font-size: 0.74rem;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: #21090933;
+  border: 1px solid #30363d;
+  animation: slideIn 0.25s ease;
+}
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(-10px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.atk-row .atk-type { color: #f0883e; font-weight: 600; }
+.atk-row .atk-detail { font-family: monospace; font-size: 0.7rem; color: #8b949e; word-break: break-all; }
+.atk-row .atk-result { white-space: nowrap; font-weight: 600; }
+.atk-row .blocked  { color: #f85149; }
+.atk-row .success  { color: #3fb950; }
+
+/* Intercepted packet preview */
+.intercept-box {
+  margin: 12px 28px 0;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 12px 16px;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+  font-size: 0.74rem;
+}
+.intercept-box.hidden { display: none; }
+.ib-col h4 { font-size: 0.63rem; color: #8b949e; text-transform: uppercase; margin-bottom: 6px; }
+.ib-col .val { font-family: monospace; word-break: break-all; line-height: 1.5; }
+.ib-col .val.purple { color: #d2a8ff; }
+.ib-col .val.red    { color: #f85149; }
+
+/* ── Log ──────────────────────────────────────────────────────────────── */
+.log-wrap {
+  margin: 14px 28px 28px;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.log-header {
+  background: #161b22;
+  padding: 10px 16px;
+  border-bottom: 1px solid #30363d;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.log-header span { font-size: 0.78rem; font-weight: 600; }
+table { width: 100%; border-collapse: collapse; font-size: 0.73rem; }
+th {
+  background: #161b22; border-bottom: 1px solid #30363d;
+  padding: 8px 12px; text-align: left; color: #8b949e;
+  font-weight: 500; white-space: nowrap;
+}
+td { padding: 7px 12px; border-bottom: 1px solid #21262d; vertical-align: middle; }
+tr:last-child td { border-bottom: none; }
+tr.new-row { animation: fadeIn 0.3s ease; }
+@keyframes fadeIn { from { background: #f8514922; } to { background: transparent; } }
+.pill {
+  display: inline-block; border-radius: 10px; padding: 2px 7px;
+  font-size: 0.64rem; font-weight: 600;
+}
+.pill-blocked { background: #f8514933; color: #f85149; border: 1px solid #f8514966; }
+.pill-ok      { background: #1a7f3733; color: #3fb950; border: 1px solid #1a7f3766; }
+.pill-cat-n   { background: #1f6feb33; color: #58a6ff; border: 1px solid #1f6feb66; }
+.pill-cat-s   { background: #e3b34133; color: #e3b341; border: 1px solid #e3b34166; }
+.pill-cat-a   { background: #f0883e33; color: #f0883e; border: 1px solid #f0883e66; }
+.mono { font-family: monospace; }
+
+/* ── Controls ─────────────────────────────────────────────────────────── */
+.controls { display: flex; gap: 10px; margin: 14px 28px; }
+.btn {
+  padding: 8px 18px; border-radius: 6px; border: 1px solid #30363d;
+  cursor: pointer; font-size: 0.8rem; font-weight: 500;
+}
+.btn-red    { background: #da3633; border-color: #f85149; color: #fff; }
+.btn-red:hover { background: #f85149; }
+.btn-secondary { background: #21262d; color: #e6edf3; }
+.btn-secondary:hover { background: #30363d; }
+.btn:disabled { opacity: 0.65; cursor: not-allowed; }
+#btn-pause { min-width: 90px; }
+
+/* ── Score banner ─────────────────────────────────────────────────────── */
+#score-banner {
+  display: none;
+  margin: 0 28px 14px;
+  padding: 12px 18px;
+  background: #0d2010;
+  border: 1px solid #3fb950;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  color: #3fb950;
+  font-weight: 600;
+}
+#score-banner.visible { display: block; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Fog Security — Attacker Demo</h1>
+  <span class="subtitle">Man-in-the-Middle on UDP channel</span>
+  <span class="badge-red">Attacker Perspective</span>
+  <a class="nav-link" href="/">&larr; Normal Simulation</a>
+</header>
+
+<!-- Topology with attacker -->
+<div class="topology" id="topology">
+
+  <div class="node">
+    <div class="node-box" id="box-sensor">
+      <span class="node-icon">⌚</span>
+      <span class="node-label">Wearable<br>Sensor</span>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;align-items:center;flex:1;max-width:80px;">
+    <div class="connector danger" style="width:100%;position:relative;">
+      <span class="connector-label">UDP (sniffable)</span>
+    </div>
+    <div class="atk-wrap" style="margin-top:-1px;">
+      <div class="atk-wire"></div>
+      <div class="atk-box" id="box-attacker">
+        <span class="atk-icon">💀</span>
+        <span class="atk-label">ATTACKER<br>MitM</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="node">
+    <div class="node-box" id="box-fog">
+      <span class="node-icon">🌫</span>
+      <span class="node-label">Fog Node</span>
+    </div>
+  </div>
+
+  <div id="packet-dot"></div>
+</div>
+
+<!-- Intercepted packet display -->
+<div class="intercept-box hidden" id="intercept-box">
+  <div class="ib-col">
+    <h4>CBOR Plaintext (inside the packet)</h4>
+    <div class="val" style="color:#79c0ff;font-size:0.68rem;word-break:break-all;" id="cbor-hex">—</div>
+  </div>
+  <div class="ib-col">
+    <h4>What Attacker Intercepts (wire)</h4>
+    <div class="val purple" id="wire-hex">—</div>
+  </div>
+  <div class="ib-col">
+    <h4>Can Attacker Read It?</h4>
+    <div class="val red" id="readability">—</div>
+  </div>
+</div>
+
+
+<!-- Controls -->
+<div class="controls">
+  <button class="btn btn-red" id="btn-start">Run Attacker Demo</button>
+  <button class="btn btn-secondary" id="btn-pause" disabled>|| Pause</button>
+  <button class="btn btn-secondary" id="btn-reset" disabled>Reset</button>
+  <span id="progress-text" style="align-self:center;font-size:0.77rem;color:#8b949e;"></span>
+</div>
+
+<!-- Attacker attack panel -->
+<div class="atk-panel" id="atk-panel">
+  <div class="atk-panel-header">
+    💀 Attacker's Attempts
+    <span style="color:#8b949e;font-weight:normal;font-size:0.7rem;">— each attempt against Ascon-128 AEAD</span>
+  </div>
+  <div class="atk-panel-body" id="atk-body">
+    <span style="color:#8b949e;font-size:0.75rem;">No attacks yet — run the demo to see them.</span>
+  </div>
+</div>
+
+<!-- Score banner -->
+<div id="score-banner"></div>
+
+<!-- Log -->
+<div class="log-wrap">
+  <div class="log-header">
+    <span>Packet Outcome Log</span>
+    <span id="log-count">0 packets</span>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Pkt#</th>
+        <th>Category</th>
+        <th>Wire Size</th>
+        <th>Attacker Sees</th>
+        <th>Wrong Key</th>
+        <th>Byte-Flip</th>
+        <th>Replay</th>
+        <th>Fog Gets</th>
+      </tr>
+    </thead>
+    <tbody id="log-body">
+      <tr id="empty-row">
+        <td colspan="9" style="text-align:center;color:#8b949e;padding:24px;">
+          Click "Run Attacker Demo" to start
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<script>
+const dot = document.getElementById('packet-dot');
+let evtSource  = null;
+let rowCount   = 0;
+let atkStats   = { blocked: 0, total: 0 };
+let paused     = false;
+let draining   = false;
+const eventQueue = [];
+const pkts = {};
+
+const STEP_DELAYS = {
+  init: 0, intercept: 500, attack: 600, forward: 400, done: 0
+};
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+function getNodeCenter(id) {
+  const el   = document.getElementById(id);
+  const topo = document.getElementById('topology');
+  const er   = el.getBoundingClientRect();
+  const tr   = topo.getBoundingClientRect();
+  return { x: er.left - tr.left + er.width / 2, y: er.top - tr.top + er.height / 2 };
+}
+
+function moveDotTo(nodeId, cls='') {
+  const c = getNodeCenter(nodeId);
+  dot.className = 'visible ' + cls;
+  dot.style.left = (c.x - 6.5) + 'px';
+  dot.style.top  = (c.y - 6.5) + 'px';
+}
+function hideDot() { dot.className = ''; }
+
+function glowNode(id, cls, ms=700) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.add(cls);
+  setTimeout(() => el.classList.remove(cls), ms);
+}
+
+function catPill(cat) {
+  if (cat === 'normal')          return `<span class="pill pill-cat-n">Normal</span>`;
+  if (cat === 'Spoofing')        return `<span class="pill pill-cat-s">Spoofing</span>`;
+  if (cat === 'Data Alteration') return `<span class="pill pill-cat-a">Data Alt.</span>`;
+  return `<span class="pill">${cat}</span>`;
+}
+
+document.getElementById('btn-start').addEventListener('click', startDemo);
+document.getElementById('btn-pause').addEventListener('click', togglePause);
+document.getElementById('btn-reset').addEventListener('click', resetDemo);
+
+function startDemo() {
+  document.getElementById('btn-start').disabled = true;
+  document.getElementById('btn-pause').disabled = false;
+  document.getElementById('btn-reset').disabled = false;
+  document.getElementById('empty-row')?.remove();
+  document.getElementById('intercept-box').classList.remove('hidden');
+  document.getElementById('atk-body').innerHTML = '';
+
+  evtSource = new EventSource('/stream-attack');
+  evtSource.onmessage = e => {
+    const ev = JSON.parse(e.data);
+    if (paused) { eventQueue.push(ev); }
+    else        { processEvent(ev); }
+  };
+  evtSource.onerror = () => evtSource.close();
+}
+
+function togglePause() {
+  paused = !paused;
+  const btn = document.getElementById('btn-pause');
+  btn.textContent = paused ? '> Resume' : '|| Pause';
+  btn.style.borderColor = paused ? '#f0883e' : '';
+  btn.style.color       = paused ? '#f0883e' : '';
+  if (!paused && !draining) drainQueue();
+}
+
+async function drainQueue() {
+  draining = true;
+  while (eventQueue.length > 0 && !paused) {
+    const ev = eventQueue.shift();
+    processEvent(ev);
+    await sleep(STEP_DELAYS[ev.type] ?? 200);
+  }
+  draining = false;
+}
+
+function resetDemo() {
+  if (evtSource) { evtSource.close(); evtSource = null; }
+  paused = false; draining = false; eventQueue.length = 0;
+  hideDot();
+  rowCount = 0;
+  atkStats = { blocked: 0, total: 0 };
+  document.getElementById('log-body').innerHTML =
+    '<tr id="empty-row"><td colspan="9" style="text-align:center;color:#8b949e;padding:24px;">Click "Run Attacker Demo" to start</td></tr>';
+  document.getElementById('intercept-box').classList.add('hidden');
+  document.getElementById('atk-body').innerHTML =
+    '<span style="color:#8b949e;font-size:0.75rem;">No attacks yet — run the demo to see them.</span>';
+  document.getElementById('score-banner').className = '';
+  document.getElementById('score-banner').textContent = '';
+  document.getElementById('progress-text').textContent = '';
+  document.getElementById('log-count').textContent = '0 packets';
+  ['box-sensor','box-fog'].forEach(id => {
+    const b = document.getElementById(id);
+    if (b) b.className = 'node-box';
+  });
+  document.getElementById('box-attacker').className = 'atk-box';
+  const pb = document.getElementById('btn-pause');
+  pb.textContent = '|| Pause'; pb.style.borderColor = ''; pb.style.color = '';
+  pb.disabled = true;
+  document.getElementById('btn-start').disabled = false;
+  document.getElementById('btn-reset').disabled = true;
+}
+
+function appendAtkRow(type, detail, result, blocked) {
+  const div = document.createElement('div');
+  div.className = 'atk-row';
+  div.innerHTML = `
+    <span class="atk-type">${type}</span>
+    <span class="atk-detail">${detail}</span>
+    <span class="atk-result ${blocked ? 'blocked' : 'success'}">${blocked ? '✗ ' : '✓ '}${result}</span>
+  `;
+  const body = document.getElementById('atk-body');
+  body.appendChild(div);
+  body.scrollTop = body.scrollHeight;
+}
+
+function processEvent(ev) {
+
+  if (ev.type === 'init') {
+    document.getElementById('progress-text').textContent =
+      `${ev.total} packets | ${ev.message}`;
+    return;
+  }
+
+  if (ev.type === 'intercept') {
+    moveDotTo('box-sensor', 'encrypted');
+    glowNode('box-sensor', 'glow-sensor');
+
+    document.getElementById('cbor-hex').textContent =
+      ev.cbor_hex.slice(0, 64) + (ev.cbor_hex.length > 64 ? '…' : '') + `  (${ev.cbor_size}B)`;
+    document.getElementById('wire-hex').textContent   = ev.wire_hex;
+    document.getElementById('readability').textContent = ev.attacker_sees;
+
+    setTimeout(() => {
+      glowNode('box-attacker', 'active');
+      moveDotTo('box-attacker', 'rejected');
+    }, 200);
+
+    pkts[ev.seq] = {
+      seq: ev.seq, pkt_num: ev.pkt_num, category: ev.category,
+      wire_size: ev.wire_size, attacks: [], forward: null
+    };
+    return;
+  }
+
+  if (ev.type === 'attack') {
+    appendAtkRow(ev.attack_type, ev.detail, ev.result, ev.blocked);
+    atkStats.total++;
+    if (ev.blocked) atkStats.blocked++;
+    if (pkts[ev.seq]) pkts[ev.seq].attacks.push({ type: ev.attack_type, blocked: ev.blocked });
+    return;
+  }
+
+  if (ev.type === 'forward') {
+    if (pkts[ev.seq]) pkts[ev.seq].forward = ev.forward_ok;
+
+    if (ev.forward_ok) {
+      moveDotTo('box-fog', 'ok');
+      glowNode('box-fog', 'glow-fog');
+    } else {
+      hideDot();
+    }
+
+    const pkt = pkts[ev.seq];
+    if (pkt) {
+      rowCount++;
+      document.getElementById('log-count').textContent = `${rowCount} packets`;
+      const a = pkt.attacks;
+      const b0 = a[0]?.blocked, b1 = a[1]?.blocked, b2 = a[2]?.blocked;
+      const blocked_pill = (b) =>
+        b === undefined ? `<span style="color:#8b949e">—</span>` :
+        b ? `<span class="pill pill-blocked">✗ BLOCKED</span>` :
+            `<span class="pill pill-ok">✓ OK</span>`;
+      const fogPill = pkt.forward
+        ? `<span class="pill pill-ok">✓ Received</span>`
+        : `<span class="pill pill-blocked">✗ Dropped</span>`;
+
+      const tr = document.createElement('tr');
+      tr.className = 'new-row';
+      tr.innerHTML = `
+        <td>${pkt.seq}</td>
+        <td>${pkt.pkt_num}</td>
+        <td>${catPill(pkt.category)}</td>
+        <td>${pkt.wire_size}B</td>
+        <td class="mono" style="color:#d2a8ff;font-size:0.65rem;">Encrypted (unreadable)</td>
+        <td>${blocked_pill(b0)}</td>
+        <td>${blocked_pill(b1)}</td>
+        <td>${blocked_pill(b2)}</td>
+        <td>${fogPill}</td>
+      `;
+      document.getElementById('log-body').prepend(tr);
+    }
+    return;
+  }
+
+  if (ev.type === 'done') {
+    hideDot();
+    document.getElementById('btn-pause').disabled = true;
+    const sb = document.getElementById('score-banner');
+    sb.className = 'visible';
+    if (atkStats.blocked === atkStats.total && atkStats.total > 0) {
+      sb.innerHTML = `✓ Security verdict: ALL ${atkStats.total} attack attempts blocked by Ascon-128 AEAD. The encryption held. Fog node received clean packets only.`;
+    } else {
+      sb.innerHTML = `⚠ Security verdict: ${atkStats.blocked}/${atkStats.total} attacks blocked. Review results above.`;
+    }
+    document.getElementById('progress-text').textContent = 'Demo complete.';
+    if (evtSource) { evtSource.close(); evtSource = null; }
+    return;
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Fog Security — Live Simulation</title>
+<style>
+/* ── Reset & base ─────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  background: #0d1117;
+  color: #e6edf3;
+  min-height: 100vh;
+}
+
+/* ── Top bar ──────────────────────────────────────────────────────────── */
+header {
+  background: #161b22;
+  border-bottom: 1px solid #30363d;
+  padding: 14px 28px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+header h1 { font-size: 1.1rem; font-weight: 600; color: #58a6ff; }
+header .subtitle { font-size: 0.78rem; color: #8b949e; }
+.badge {
+  background: #1f6feb33;
+  color: #58a6ff;
+  border: 1px solid #1f6feb66;
+  border-radius: 12px;
+  padding: 2px 10px;
+  font-size: 0.72rem;
+  font-weight: 500;
+}
+.badge.green { background: #1a7f3733; color: #3fb950; border-color: #1a7f3766; }
+.nav-link {
+  margin-left: auto;
+  background: #21262d;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 6px 14px;
+  color: #e6edf3;
+  text-decoration: none;
+  font-size: 0.8rem;
+  transition: background 0.15s;
+}
+.nav-link:hover { background: #30363d; }
+
+/* ── Network topology diagram ─────────────────────────────────────────── */
+.topology {
+  padding: 28px 28px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  position: relative;
+  height: 160px;
+  overflow: visible;
+}
+
+.node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  z-index: 2;
+}
+.node-box {
+  width: 110px;
+  height: 72px;
+  border-radius: 10px;
+  border: 2px solid #30363d;
+  background: #161b22;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  transition: border-color 0.3s, box-shadow 0.3s;
+  position: relative;
+  overflow: hidden;
+}
+.node-box.active {
+  border-color: #58a6ff;
+  box-shadow: 0 0 18px #58a6ff44;
+}
+.node-box.fog-active {
+  border-color: #3fb950;
+  box-shadow: 0 0 18px #3fb95044;
+}
+.node-box.reject {
+  border-color: #f85149;
+  box-shadow: 0 0 18px #f8514944;
+}
+.node-icon { font-size: 1.5rem; }
+.node-label { font-size: 0.7rem; color: #8b949e; font-weight: 500; text-align: center; }
+.node-sublabel { font-size: 0.65rem; color: #58a6ff; }
+
+/* ── Connector lines ──────────────────────────────────────────────────── */
+.connector {
+  flex: 1;
+  max-width: 80px;
+  height: 2px;
+  background: linear-gradient(90deg, #30363d, #58a6ff44, #30363d);
+  position: relative;
+  z-index: 1;
+}
+.connector-label {
+  position: absolute;
+  top: -18px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.6rem;
+  color: #8b949e;
+  white-space: nowrap;
+}
+
+/* ── Animated packet dot ──────────────────────────────────────────────── */
+#packet-dot {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #58a6ff;
+  box-shadow: 0 0 12px #58a6ff;
+  top: 0;
+  left: 0;
+  transform: translateY(-50%);
+  transition: left 0.35s cubic-bezier(0.4,0,0.2,1),
+              background 0.2s, box-shadow 0.2s;
+  pointer-events: none;
+  z-index: 10;
+  display: none;
+}
+#packet-dot.visible { display: block; }
+#packet-dot.encrypted {
+  background: #d2a8ff;
+  box-shadow: 0 0 12px #d2a8ff;
+}
+#packet-dot.rejected {
+  background: #f85149;
+  box-shadow: 0 0 12px #f85149;
+}
+#packet-dot.ids-ok {
+  background: #3fb950;
+  box-shadow: 0 0 12px #3fb950;
+}
+
+/* ── Step progress bar ────────────────────────────────────────────────── */
+.steps {
+  display: flex;
+  justify-content: center;
+  gap: 0;
+  padding: 14px 28px 6px;
+}
+.step {
+  flex: 1;
+  max-width: 140px;
+  text-align: center;
+  font-size: 0.65rem;
+  color: #8b949e;
+  padding: 4px;
+  border-bottom: 2px solid #30363d;
+  transition: color 0.2s, border-color 0.2s;
+}
+.step.active { color: #58a6ff; border-color: #58a6ff; }
+.step.done   { color: #3fb950; border-color: #3fb950; }
+
+/* ── Current packet detail panel ─────────────────────────────────────── */
+.detail-bar {
+  margin: 12px 28px;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 12px 18px;
+  display: grid;
+  grid-template-columns: 1fr 1.4fr 1.4fr 0.8fr;
+  gap: 12px;
+  align-items: start;
+}
+.detail-bar.hidden { display: none; }
+.detail-section { display: flex; flex-direction: column; gap: 4px; overflow: hidden; }
+.detail-section h4 { font-size: 0.62rem; color: #8b949e; text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; }
+.detail-section .val {
+  font-size: 0.72rem;
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+  color: #e6edf3;
+  word-break: break-all;
+  line-height: 1.4;
+  max-height: 3.6em;      /* show ~2 wrapped lines then clip */
+  overflow: hidden;
+}
+.detail-section .val.green { color: #3fb950; }
+.detail-section .val.red   { color: #f85149; }
+.detail-section .val.blue  { color: #58a6ff; }
+.detail-section .val.purple{ color: #d2a8ff; }
+
+/* ── IDS status bar ───────────────────────────────────────────────────── */
+#ids-banner {
+  margin: 0 28px 10px;
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  background: #161b22;
+  border: 1px solid #30363d;
+  color: #8b949e;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+#ids-banner.ready { border-color: #3fb950; color: #3fb950; }
+
+/* ── Log table ────────────────────────────────────────────────────────── */
+.log-wrap {
+  margin: 0 28px 28px;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.log-header {
+  background: #161b22;
+  padding: 10px 16px;
+  border-bottom: 1px solid #30363d;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.log-header span { font-size: 0.78rem; font-weight: 600; }
+#progress-text { font-size: 0.72rem; color: #8b949e; }
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.73rem;
+}
+th {
+  background: #161b22;
+  border-bottom: 1px solid #30363d;
+  padding: 8px 12px;
+  text-align: left;
+  color: #8b949e;
+  font-weight: 500;
+  white-space: nowrap;
+}
+td {
+  padding: 7px 12px;
+  border-bottom: 1px solid #21262d;
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+  vertical-align: middle;
+}
+tr:last-child td { border-bottom: none; }
+tr.new-row { animation: fadeIn 0.3s ease; }
+@keyframes fadeIn {
+  from { background: #1f6feb22; }
+  to   { background: transparent; }
+}
+.pill {
+  display: inline-block;
+  border-radius: 10px;
+  padding: 2px 8px;
+  font-size: 0.65rem;
+  font-weight: 600;
+}
+.pill-ok     { background: #1a7f3733; color: #3fb950; border: 1px solid #1a7f3766; }
+.pill-reject { background: #f8514933; color: #f85149; border: 1px solid #f8514966; }
+.pill-normal { background: #1f6feb33; color: #58a6ff; border: 1px solid #1f6feb66; }
+.pill-spoof  { background: #e3b34133; color: #e3b341; border: 1px solid #e3b34166; }
+.pill-alter  { background: #f0883e33; color: #f0883e; border: 1px solid #f0883e66; }
+.mono { font-family: 'Cascadia Code', 'Fira Code', monospace; }
+
+/* ── Stats summary ────────────────────────────────────────────────────── */
+#stats-bar {
+  display: none;
+  margin: 0 28px 20px;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
+}
+#stats-bar.visible { display: grid; }
+.stat-card {
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 12px 16px;
+  text-align: center;
+}
+.stat-card .num { font-size: 1.5rem; font-weight: 700; color: #e6edf3; }
+.stat-card .lbl { font-size: 0.65rem; color: #8b949e; margin-top: 2px; }
+.stat-card .num.green { color: #3fb950; }
+.stat-card .num.red   { color: #f85149; }
+
+/* ── Controls ─────────────────────────────────────────────────────────── */
+.controls {
+  display: flex;
+  gap: 10px;
+  margin: 0 28px 16px;
+}
+.btn {
+  padding: 8px 18px;
+  border-radius: 6px;
+  border: 1px solid #30363d;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 500;
+  transition: background 0.15s;
+}
+.btn-primary {
+  background: #238636;
+  border-color: #2ea043;
+  color: #fff;
+}
+.btn-primary:hover { background: #2ea043; }
+.btn-secondary {
+  background: #21262d;
+  color: #e6edf3;
+}
+.btn-secondary:hover { background: #30363d; }
+.btn:disabled { opacity: 0.65; cursor: not-allowed; }
+#btn-pause { min-width: 90px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Fog Security — Pipeline Simulation</h1>
+  <span class="subtitle">WUSTL-EHMS-2020 &nbsp;|&nbsp; Ascon-128 AEAD &nbsp;|&nbsp; MQTT-SN over UDP</span>
+  <span class="badge">Normal Simulation</span>
+  <a class="nav-link" href="/attacker">Attacker Demo &rarr;</a>
+</header>
+
+<!-- Network topology -->
+<div class="topology" id="topology">
+  <div class="node" id="node-sensor">
+    <div class="node-box" id="box-sensor">
+      <span class="node-icon">⌚</span>
+      <span class="node-label">Wearable<br>Sensor</span>
+    </div>
+  </div>
+
+  <div class="connector" id="conn-1">
+    <span class="connector-label">UDP / MQTT-SN</span>
+  </div>
+
+  <div class="node" id="node-fog">
+    <div class="node-box" id="box-fog">
+      <span class="node-icon">🌫</span>
+      <span class="node-label">Fog Node<br>Gateway</span>
+    </div>
+  </div>
+
+  <div class="connector" id="conn-2">
+    <span class="connector-label">MQTT BROKER</span>
+  </div>
+
+  <div class="node" id="node-ids">
+    <div class="node-box" id="box-ids">
+      <span class="node-icon">🛡</span>
+      <span class="node-label">IDS<br>(XGBoost)</span>
+    </div>
+  </div>
+
+  <div class="connector" id="conn-3">
+    <span class="connector-label">Forwarded</span>
+  </div>
+
+  <div class="node" id="node-cloud">
+    <div class="node-box" id="box-cloud">
+      <span class="node-icon">☁</span>
+      <span class="node-label">Cloud<br>Backend</span>
+    </div>
+  </div>
+
+  <div id="packet-dot"></div>
+</div>
+
+<!-- Step labels -->
+<div class="steps">
+  <div class="step" id="step-payload">1. Build Payload</div>
+  <div class="step" id="step-encrypt">2. Encrypt (Ascon)</div>
+  <div class="step" id="step-transmit">3. Transmit</div>
+  <div class="step" id="step-auth">4. Auth + Decrypt</div>
+  <div class="step" id="step-ids">5. IDS Classify</div>
+</div>
+
+<!-- Current packet detail -->
+<div class="detail-bar hidden" id="detail-bar">
+  <div class="detail-section">
+    <h4>Plaintext Biometrics</h4>
+    <div class="val blue" id="d-plaintext">—</div>
+  </div>
+  <div class="detail-section">
+    <h4>CBOR Serialised (hex)</h4>
+    <div class="val" style="color:#79c0ff;" id="d-cbor">—</div>
+  </div>
+  <div class="detail-section">
+    <h4>Ciphertext (Ascon-128)</h4>
+    <div class="val purple" id="d-cipher">—</div>
+  </div>
+  <div class="detail-section">
+    <h4>Auth / IDS</h4>
+    <div class="val" id="d-result">—</div>
+  </div>
+</div>
+
+<!-- IDS status -->
+<div id="ids-banner">
+  <span id="ids-icon">⏳</span>
+  <span id="ids-text">IDS model training in background (RandomForest on WUSTL-EHMS-2020)…</span>
+</div>
+
+<!-- Controls -->
+<div class="controls">
+  <button class="btn btn-primary" id="btn-start">Run Simulation</button>
+  <button class="btn btn-secondary" id="btn-pause" disabled>|| Pause</button>
+  <button class="btn btn-secondary" id="btn-reset" disabled>Reset</button>
+  <span id="progress-text" style="align-self:center; font-size:0.78rem; color:#8b949e;"></span>
+</div>
+
+<!-- Stats -->
+<div id="stats-bar">
+  <div class="stat-card"><div class="num" id="s-sent">0</div><div class="lbl">Packets Sent</div></div>
+  <div class="stat-card"><div class="num green" id="s-ok">0</div><div class="lbl">Auth OK</div></div>
+  <div class="stat-card"><div class="num red" id="s-fail">0</div><div class="lbl">Auth Rejected</div></div>
+  <div class="stat-card"><div class="num" id="s-attacks">0</div><div class="lbl">Attack Packets</div></div>
+  <div class="stat-card"><div class="num green" id="s-cbor">0%</div><div class="lbl">CBOR Savings vs JSON</div></div>
+</div>
+
+<!-- Log -->
+<div class="log-wrap">
+  <div class="log-header">
+    <span>Packet Log</span>
+    <span id="log-count">0 packets</span>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Pkt Num</th>
+        <th>Category</th>
+        <th>Biometrics</th>
+        <th>CBOR (B)</th>
+        <th>Ciphertext (hex)</th>
+        <th>Auth</th>
+        <th>IDS Label</th>
+      </tr>
+    </thead>
+    <tbody id="log-body">
+      <tr id="empty-row">
+        <td colspan="8" style="text-align:center; color:#8b949e; padding:28px;">
+          Click "Run Simulation" to start
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<script>
+// ── Topology geometry helpers ───────────────────────────────────────────────
+function getNodeCenter(id) {
+  const el = document.getElementById(id);
+  const topo = document.getElementById('topology');
+  const er = el.getBoundingClientRect();
+  const tr = topo.getBoundingClientRect();
+  return { x: er.left - tr.left + er.width / 2, y: er.top - tr.top + er.height / 2 };
+}
+
+// ── Packet dot animation ────────────────────────────────────────────────────
+const dot = document.getElementById('packet-dot');
+
+function moveDotTo(nodeId, cls = '') {
+  const c = getNodeCenter(nodeId);
+  dot.className = 'visible ' + cls;
+  dot.style.left = (c.x - 7) + 'px';
+  dot.style.top  = (c.y - 7) + 'px';
+}
+
+function hideDot() { dot.className = ''; }
+
+// ── Step highlight ──────────────────────────────────────────────────────────
+const STEPS = ['payload','encrypt','transmit','auth','ids'];
+function setStep(name) {
+  STEPS.forEach(s => {
+    const el = document.getElementById('step-' + s);
+    if (el) el.className = 'step';
+  });
+  const active = document.getElementById('step-' + name);
+  if (active) active.className = 'step active';
+}
+function doneStep(name) {
+  const el = document.getElementById('step-' + name);
+  if (el) el.className = 'step done';
+}
+
+// ── Node glow ───────────────────────────────────────────────────────────────
+function glowNode(id, cls, ms = 800) {
+  const box = document.getElementById(id);
+  if (!box) return;
+  box.classList.add(cls);
+  setTimeout(() => box.classList.remove(cls), ms);
+}
+
+// ── Category pill ───────────────────────────────────────────────────────────
+function categoryPill(cat) {
+  if (cat === 'normal')           return `<span class="pill pill-normal">Normal</span>`;
+  if (cat === 'Spoofing')         return `<span class="pill pill-spoof">Spoofing</span>`;
+  if (cat === 'Data Alteration')  return `<span class="pill pill-alter">Data Alteration</span>`;
+  return `<span class="pill">${cat}</span>`;
+}
+
+// ── IDS status polling ──────────────────────────────────────────────────────
+let idsReady = false;
+function pollIDS() {
+  fetch('/ids-status').then(r => r.json()).then(d => {
+    const banner = document.getElementById('ids-banner');
+    const icon   = document.getElementById('ids-icon');
+    const text   = document.getElementById('ids-text');
+    if (d.ready) {
+      idsReady = true;
+      banner.className = 'ready';
+      icon.textContent = '✓';
+      text.textContent = 'IDS model ready (trained on WUSTL-EHMS-2020). Live classification active.';
+    } else if (d.status === 'training') {
+      setTimeout(pollIDS, 2000);
+    } else {
+      icon.textContent = '⚠';
+      text.textContent = `IDS: ${d.status}`;
+    }
+  }).catch(() => setTimeout(pollIDS, 3000));
+}
+pollIDS();
+
+// ── Main simulation ─────────────────────────────────────────────────────────
+let evtSource  = null;
+let rowCount   = 0;
+let paused     = false;
+let draining   = false;
+const eventQueue = [];
+
+// Mirrors server-side sleep times so drain pacing matches live playback
+const STEP_DELAYS = {
+  init: 0, payload: 250, encrypt: 350, transmit: 300,
+  auth: 250, ids: 200, stats: 0, done: 0
+};
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+document.getElementById('btn-start').addEventListener('click', startSim);
+document.getElementById('btn-pause').addEventListener('click', togglePause);
+document.getElementById('btn-reset').addEventListener('click', resetSim);
+
+function startSim() {
+  document.getElementById('btn-start').disabled = true;
+  document.getElementById('btn-pause').disabled = false;
+  document.getElementById('btn-reset').disabled = false;
+  document.getElementById('empty-row')?.remove();
+  document.getElementById('detail-bar').classList.remove('hidden');
+
+  evtSource = new EventSource('/stream');
+  evtSource.onmessage = e => {
+    const ev = JSON.parse(e.data);
+    if (paused) { eventQueue.push(ev); }
+    else        { processEvent(ev); }
+  };
+  evtSource.onerror = () => evtSource.close();
+}
+
+function togglePause() {
+  paused = !paused;
+  const btn = document.getElementById('btn-pause');
+  btn.textContent = paused ? '> Resume' : '|| Pause';
+  btn.style.borderColor = paused ? '#f0883e' : '';
+  btn.style.color       = paused ? '#f0883e' : '';
+  if (!paused && !draining) drainQueue();
+}
+
+async function drainQueue() {
+  draining = true;
+  while (eventQueue.length > 0 && !paused) {
+    const ev = eventQueue.shift();
+    processEvent(ev);
+    await sleep(STEP_DELAYS[ev.type] ?? 150);
+  }
+  draining = false;
+}
+
+function resetSim() {
+  if (evtSource) { evtSource.close(); evtSource = null; }
+  paused = false; draining = false; eventQueue.length = 0;
+  hideDot();
+  rowCount = 0;
+  document.getElementById('log-body').innerHTML =
+    '<tr id="empty-row"><td colspan="8" style="text-align:center;color:#8b949e;padding:28px;">Click "Run Simulation" to start</td></tr>';
+  document.getElementById('detail-bar').classList.add('hidden');
+  document.getElementById('stats-bar').classList.remove('visible');
+  document.getElementById('progress-text').textContent = '';
+  document.getElementById('log-count').textContent = '0 packets';
+  STEPS.forEach(s => { const el = document.getElementById('step-'+s); if(el) el.className='step'; });
+  ['box-sensor','box-fog','box-ids','box-cloud'].forEach(id => {
+    const b = document.getElementById(id);
+    if(b) b.className = 'node-box';
+  });
+  const pb = document.getElementById('btn-pause');
+  pb.textContent = '|| Pause'; pb.style.borderColor = ''; pb.style.color = '';
+  pb.disabled = true;
+  document.getElementById('btn-start').disabled = false;
+  document.getElementById('btn-reset').disabled = true;
+}
+
+// Per-packet partial row state
+const rows = {};
+
+function processEvent(ev) {
+
+  if (ev.type === 'init') {
+    document.getElementById('progress-text').textContent =
+      `${ev.total} packets | ${ev.protocol} | ${ev.cipher} | key: ${ev.key_hex.slice(0,16)}…`;
+    return;
+  }
+
+  if (ev.type === 'payload') {
+    setStep('payload');
+    moveDotTo('box-sensor', '');
+    glowNode('box-sensor', 'active');
+
+    const b = ev.biometrics;
+    document.getElementById('d-plaintext').textContent =
+      `Temp:${b.Temp}  SpO2:${b.SpO2}  HR:${b.Heart_rate}  SYS:${b.SYS}  DIA:${b.DIA}  Resp:${b.Resp_Rate}`;
+    document.getElementById('d-cbor').textContent =
+      ev.cbor_hex.slice(0, 80) + (ev.cbor_hex.length > 80 ? '…' : '') + ` (${ev.cbor_size}B)`;
+    document.getElementById('d-cipher').textContent = '—';
+    document.getElementById('d-result').textContent = '—';
+    document.getElementById('d-result').className = 'val';
+
+    rows[ev.seq] = {
+      seq:       ev.seq,
+      pkt_num:   ev.pkt_num,
+      category:  ev.category,
+      bio_str:   `T:${b.Temp} O₂:${b.SpO2}% HR:${b.Heart_rate}`,
+      cbor_hex:  ev.cbor_hex,
+      cbor_size: ev.cbor_size,
+      ct_hex:    '—',
+      auth:      null,
+      ids:       null,
+    };
+    return;
+  }
+
+  if (ev.type === 'encrypt') {
+    setStep('encrypt');
+    moveDotTo('box-sensor', 'encrypted');
+    if (rows[ev.seq]) rows[ev.seq].ct_hex = ev.ct_hex;
+    document.getElementById('d-cipher').textContent = ev.ct_hex.slice(0,48) + '…';
+    return;
+  }
+
+  if (ev.type === 'transmit') {
+    setStep('transmit');
+    moveDotTo('box-fog', 'encrypted');
+    return;
+  }
+
+  if (ev.type === 'auth') {
+    setStep('auth');
+    if (ev.auth_ok) {
+      glowNode('box-fog', 'fog-active');
+      moveDotTo('box-fog', 'ids-ok');
+    } else {
+      glowNode('box-fog', 'reject');
+      moveDotTo('box-fog', 'rejected');
+    }
+    if (rows[ev.seq]) rows[ev.seq].auth = ev.auth_ok;
+
+    const dres = document.getElementById('d-result');
+    if (ev.auth_ok) {
+      dres.textContent = '✓ AUTH OK';
+      dres.className = 'val green';
+    } else {
+      dres.textContent = `✗ REJECTED — ${ev.reason}`;
+      dres.className = 'val red';
+    }
+    return;
+  }
+
+  if (ev.type === 'ids') {
+    setStep('ids');
+    if (ev.auth_ok) {
+      moveDotTo('box-ids', 'ids-ok');
+      glowNode('box-ids', 'fog-active');
+      setTimeout(() => { moveDotTo('box-cloud', 'ids-ok'); glowNode('box-cloud', 'fog-active'); }, 250);
+    }
+    if (rows[ev.seq]) rows[ev.seq].ids = ev.label;
+
+    const row = rows[ev.seq];
+    if (row) {
+      rowCount++;
+      document.getElementById('log-count').textContent = `${rowCount} packets`;
+      const tr = document.createElement('tr');
+      tr.className = 'new-row';
+      const authPill = row.auth
+        ? `<span class="pill pill-ok">✓ OK</span>`
+        : `<span class="pill pill-reject">✗ REJECTED</span>`;
+      const idsTxt = row.ids
+        ? (row.ids === 'normal'
+            ? `<span class="pill pill-ok">${row.ids}</span>`
+            : `<span class="pill pill-alter">${row.ids}</span>`)
+        : `<span style="color:#8b949e">n/a</span>`;
+      tr.innerHTML = `
+        <td>${row.seq}</td>
+        <td>${row.pkt_num}</td>
+        <td>${categoryPill(row.category)}</td>
+        <td class="mono" style="font-size:0.67rem;">${row.bio_str}</td>
+        <td class="mono" style="font-size:0.63rem;color:#79c0ff;" title="${row.cbor_hex}">${row.cbor_hex.slice(0,20)}… <span style="color:#8b949e">(${row.cbor_size}B)</span></td>
+        <td class="mono" style="font-size:0.65rem;color:#d2a8ff;">${row.ct_hex.slice(0,32)}…</td>
+        <td>${authPill}</td>
+        <td>${idsTxt}</td>
+      `;
+      document.getElementById('log-body').prepend(tr);
+    }
+
+    STEPS.forEach(s => doneStep(s));
+    return;
+  }
+
+  if (ev.type === 'stats') {
+    const bar = document.getElementById('stats-bar');
+    bar.classList.add('visible');
+    document.getElementById('s-sent').textContent    = ev.sent;
+    document.getElementById('s-ok').textContent      = ev.auth_ok;
+    document.getElementById('s-fail').textContent    = ev.auth_fail;
+    document.getElementById('s-attacks').textContent = ev.attacks;
+    document.getElementById('s-cbor').textContent    = ev.cbor_saving_pct + '%';
+    return;
+  }
+
+  if (ev.type === 'done') {
+    hideDot();
+    document.getElementById('progress-text').textContent = 'Simulation complete.';
+    document.getElementById('btn-pause').disabled = true;
+    STEPS.forEach(s => doneStep(s));
+    if (evtSource) { evtSource.close(); evtSource = null; }
+    return;
+  }
+}
+
+// Keep old name as alias so nothing else breaks
+function handleEvent(e) { /* replaced by inline onmessage above */ }
+</script>
+</body>
+</html>
