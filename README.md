@@ -28,7 +28,10 @@ Efficient IoMT security =
 4. In ```fog_security.ipynb```, run the %pip install script and run all cells.
 5. If you mqtt broker was successful, you will notice logs such as:
    <img width="1288" height="970" alt="image" src="https://github.com/user-attachments/assets/3f196d80-253b-4f8c-93a6-e9c621c7571a" />
-
+6. Run the simulator with:
+   ```
+   python app.py
+   ```
 
 
 ## Referenced code
