@@ -1,0 +1,9 @@
+flask>=2.0
+ascon
+cbor2
+paho-mqtt
+xgboost>=1.7
+imbalanced-learn
+scikit-learn
+pandas
+numpy
