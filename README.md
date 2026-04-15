@@ -36,9 +36,8 @@ Efficient IoMT security =
    - [pipeline.py](#61-pipelinepy)
    - [app.py](#62-apppy)
 7. [Web UI](#7-web-ui)
-8. [pipeline.py vs fog_security.ipynb — What is Different?](#8-pipelinepy-vs-fog_securityipynb--what-is-different)
-9. [Attack Simulation Logic](#9-attack-simulation-logic)
-10. [Known Limitations & Academic Notes](#10-known-limitations--academic-notes)
+8. [Attack Simulation Logic](#8-attack-simulation-logic)
+9. [Known Limitations & Academic Notes](#9-known-limitations--academic-notes)
 
 ---
 
@@ -349,30 +348,7 @@ Shows a three-node topology with the attacker node hanging below the wire betwee
 
 ---
 
-## 8. pipeline.py vs fog_security.ipynb — What is Different?
-
-They share the same core algorithmic logic (identical Ascon, CBOR, transport, IDS, and simulation code), but they are structured for different purposes:
-
-| Aspect | `fog_security.ipynb` | `pipeline.py` |
-|---|---|---|
-| **Purpose** | Standalone academic notebook — demonstrates and explains every step inline | Module imported by `app.py` — provides functions for the web server |
-| **Output** | Prints formatted tables, classification reports, comparison tables to stdout | Yields SSE event dicts consumed by Flask routes |
-| **`simulate_pipeline()`** | Returns a list of decoded packet dicts; prints a formatted packet log to stdout | Not present — replaced by `simulate_stream()` generator |
-| **`simulate_stream()`** | Not present | Generator that yields step-by-step events for real-time UI animation |
-| **`attacker_stream()`** | Not present | Generator for the attacker demo UI |
-| **`print_comparison_tables()`** | Present — prints MQTT vs CoAP vs HTTP and Ascon vs AES-GCM comparison tables | Not present (not needed for web UI) |
-| **`build_biometric_payload()`** | Uses single-char keys (`"T"`, `"O"`, `"P"` etc.) for maximum CBOR compactness | Uses full keys (`"Temp"`, `"SpO2"`, `"Pulse_Rate"` etc.) so the UI can display readable field names |
-| **IDS training return value** | Returns `(clf, selected, le, flg_cols)` — 4-tuple | Returns `(clf, selected, le, flg_cols, report)` — 5-tuple (includes report string for the `/ids-status` endpoint) |
-| **Verbose IDS training output** | Yes — prints IG bar charts, confusion matrix, feature importances to stdout | No — trains silently in background thread |
-| **`__main__` block** | Yes — runs all 6 demo steps sequentially when executed as a script | No — library module only |
-| **NIST Ascon-AEAD128 note** | Contains an additional experimental NIST-compliant rate-16 Ascon-AEAD128 implementation at the bottom (different IV, rate=16, b=8) | Not present — uses the standard Ascon-128 (rate=8, b=6) throughout |
-| **Duplicate function definitions** | The notebook redefines `_py_ascon128_encrypt` and `_py_ascon128_decrypt` at the bottom with NIST-compliant parameters | Only one definition per function |
-
-**In short:** `fog_security.ipynb` is the full academic demonstration you run once to see everything printed, including all comparison tables, training logs, and IDS reports. `pipeline.py` is the cleaned-up module that powers the live Flask web app by streaming events instead of printing.
-
----
-
-## 9. Attack Simulation Logic
+## 8. Attack Simulation Logic
 
 ### Data Alteration (in `simulate_stream`)
 
@@ -406,7 +382,7 @@ All three raise `ValueError`. The legitimate forwarding (correct key + correct A
 
 ---
 
-## 10. Known Limitations & Academic Notes
+## 9. Known Limitations & Academic Notes
 
 ### Why Spoofing IDS recall is ~32% (expected, not a bug)
 
