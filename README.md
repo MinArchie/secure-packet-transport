@@ -135,7 +135,10 @@ fog-security/
 
 5. If you mqtt broker was successful, you will notice logs such as:
    <img width="1288" height="970" alt="image" src="https://github.com/user-attachments/assets/3f196d80-253b-4f8c-93a6-e9c621c7571a" />
-
+6. Run the simulator with:
+   ```
+   python app.py
+   ```
 
 
 ---
